@@ -3,18 +3,18 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Pixel World Starter</title>
-  <meta name="description" content="A minimal interactive pixel world demo for your portfolio. Arrow keys or WASD to move." />
+  <title>Pixel World Starter — Explore</title>
+  <meta name="description" content="A minimal interactive pixel world demo for your portfolio. Click Explore to go fullscreen." />
   <style>
     :root{
-      --scale: 10;
+      --scale: 4;
       --tile-size: 16;
       --tiles-x: 16;
       --tiles-y: 12;
     }
     html,body{height:100%;margin:0;background:#0b0b0f;color:#e6eef8;font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial;}
-    .wrap{min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px;gap:18px;}
-    header{display:flex;flex-direction:column;align-items:center;gap:6px}
+    .wrap{min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px;gap:18px;position:relative;}
+    header{display:flex;flex-direction:column;align-items:center;gap:6px;z-index:2}
     h1{margin:0;font-size:20px;letter-spacing:0.2px}
     .screen{
       width: calc(var(--tile-size) * var(--tiles-x) * var(--scale));
@@ -23,41 +23,83 @@
       border-radius:8px;
       box-shadow:0 12px 40px rgba(0,0,0,.6), inset 0 0 0 1px rgba(255,255,255,0.02);
       overflow:hidden;
+      position:relative;
+    }
+    /* When the screen element is fullscreen, make canvas fill it */
+    .screen:fullscreen, .screen:-webkit-full-screen {
+      width: 100vw !important;
+      height: 100vh !important;
+      border-radius: 0 !important;
+      box-shadow: none !important;
     }
     canvas{width:100%;height:100%;display:block;image-rendering:pixelated;background:transparent}
-    .meta{max-width:760px;text-align:center;font-size:13px;opacity:.95}
-    .controls{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:8px}
+    .meta{max-width:760px;text-align:center;font-size:13px;opacity:.95;z-index:2}
+    .controls{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:8px;z-index:2}
     .kbd{background:#0f1720;border:1px solid #1b2430;padding:6px 9px;border-radius:6px;color:#9fe;font-weight:700;font-size:13px}
-    footer{font-size:12px;opacity:.75}
+    footer{font-size:12px;opacity:.75;z-index:2}
+    /* Explore overlay */
+    .overlay {
+      position:absolute;
+      inset:0;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      background:linear-gradient(180deg, rgba(2,6,23,0.55), rgba(2,6,23,0.65));
+      z-index:5;
+      transition:opacity .25s ease;
+    }
+    .explore-btn{
+      background:linear-gradient(180deg,#ffd86b,#ffb84a);
+      color:#111;
+      border:none;
+      padding:14px 22px;
+      font-weight:800;
+      font-size:18px;
+      border-radius:12px;
+      cursor:pointer;
+      box-shadow:0 8px 30px rgba(0,0,0,.45);
+      letter-spacing:0.6px;
+    }
+    .hint{margin-top:10px;color:#dfe9ff;opacity:.9;text-align:center;font-size:13px}
+    /* Hide UI when fullscreen (so the canvas truly fills) */
+    .hide-ui header, .hide-ui .meta, .hide-ui .controls, .hide-ui footer { display:none !important; }
     @media (max-width:640px){
       :root{--scale:3}
       .meta{font-size:13px}
+      .explore-btn{padding:12px 18px;font-size:16px}
     }
   </style>
 </head>
 <body>
-  <div class="wrap">
+  <div class="wrap" id="wrap">
     <header>
       <h1>Pixel World Starter</h1>
-      <div class="meta">A compact, portfolio-ready pixel world. Use Arrow keys or WASD to move. Space to dash.</div>
+      <div class="meta">A compact, portfolio-ready pixel world. Click Explore to go fullscreen and play.</div>
     </header>
 
-    <div class="screen" id="screen">
-      <canvas id="game" width="256" height="192" aria-label="Pixel world canvas"></canvas>
+    <div class="screen" id="screen" role="application" aria-label="Pixel world">
+      <canvas id="game" width="256" height="192" aria-hidden="false"></canvas>
+
+      <!-- Centered overlay with Explore button -->
+      <div class="overlay" id="overlay" aria-hidden="false">
+        <div style="text-align:center">
+          <button id="explore" class="explore-btn" type="button">Explore</button>
+          <div class="hint" style="margin-top:8px">Click to enter fullscreen. Press Esc to exit.</div>
+        </div>
+      </div>
     </div>
 
-    <div class="controls" aria-hidden="false">
+    <div class="controls" id="controls">
       <div class="kbd">Arrow keys</div>
       <div class="kbd">W A S D</div>
       <div class="kbd">Space</div>
     </div>
 
-    <footer>Tip change <strong>--scale</strong> in the CSS to resize the canvas for screenshots.</footer>
+    <footer>Tip: change <strong>--scale</strong> in the CSS to resize the canvas for screenshots.</footer>
   </div>
 
   <script>
-  // Pixel World Starter
-  // Logical canvas: TILE * TILES_X by TILE * TILES_Y
+  // Pixel World Starter with Explore fullscreen
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d', { alpha: false });
   const TILE = 16;
@@ -221,6 +263,72 @@
   }
 
   requestAnimationFrame(loop);
+
+  // Fullscreen / Explore button logic
+  const exploreBtn = document.getElementById('explore');
+  const overlay = document.getElementById('overlay');
+  const screenEl = document.getElementById('screen');
+  const wrap = document.getElementById('wrap');
+
+  function enterFullscreen() {
+    // Prefer element fullscreen so CSS :fullscreen rules apply
+    if (screenEl.requestFullscreen) {
+      screenEl.requestFullscreen();
+    } else if (screenEl.webkitRequestFullscreen) {
+      screenEl.webkitRequestFullscreen();
+    } else if (screenEl.msRequestFullscreen) {
+      screenEl.msRequestFullscreen();
+    }
+  }
+
+  function exitFullscreen() {
+    if (document.exitFullscreen) {
+      document.exitFullscreen();
+    } else if (document.webkitExitFullscreen) {
+      document.webkitExitFullscreen();
+    } else if (document.msExitFullscreen) {
+      document.msExitFullscreen();
+    }
+  }
+
+  exploreBtn.addEventListener('click', async () => {
+    enterFullscreen();
+    // hide overlay immediately for snappy UX
+    overlay.style.opacity = '0';
+    setTimeout(() => overlay.style.display = 'none', 260);
+  });
+
+  // When fullscreen changes, hide other UI elements for immersive view
+  function onFullChange() {
+    const fs = document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement;
+    if (fs) {
+      // hide header/controls/footer
+      document.body.classList.add('hide-ui');
+    } else {
+      // restore UI
+      document.body.classList.remove('hide-ui');
+      // show overlay again so user can re-enter if they exited
+      overlay.style.display = 'flex';
+      overlay.style.opacity = '1';
+    }
+  }
+
+  document.addEventListener('fullscreenchange', onFullChange);
+  document.addEventListener('webkitfullscreenchange', onFullChange);
+  document.addEventListener('msfullscreenchange', onFullChange);
+
+  // Accessibility: allow Enter key on Explore button
+  exploreBtn.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      exploreBtn.click();
+    }
+  });
+
+  // Optional: when user clicks the canvas while not fullscreen, focus it
+  canvas.addEventListener('click', () => {
+    canvas.focus();
+  });
   </script>
 </body>
 </html>
